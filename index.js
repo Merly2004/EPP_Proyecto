@@ -24,7 +24,6 @@ app.use(bodyParser.json());
 
 // La URL base vendrá de las variables de entorno de Render
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
-const PORT = process.env.PORT || 3000;
 
 // Configuración de Multer (Almacenamiento de fotos de perfil)
 const storage = multer.diskStorage({
