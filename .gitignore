@@ -3,6 +3,5 @@ node_modules/
 .idea/
 build/
 *.apk
-serviceAccountKey.json
 .env
 .DS_Store
