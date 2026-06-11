@@ -7,7 +7,7 @@ const multer = require('multer');
 const fs = require('fs');
 
 // Inicialización de Firebase
-const serviceAccount = require('./serviceAccountKey.json');
+//const serviceAccount = require('./serviceAccountKey.json');
 admin.initializeApp({
     credential: admin.credential.cert({
         projectId: process.env.FIREBASE_PROJECT_ID,
