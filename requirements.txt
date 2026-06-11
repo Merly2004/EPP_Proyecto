@@ -1,0 +1,7 @@
+body-parser
+cors
+express
+firebase-admin
+multer
+pg
+
