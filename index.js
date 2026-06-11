@@ -204,6 +204,7 @@ app.post('/api/notificacion-flask', async (req, res) => {
 
 
 // ESCUCHA
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Servidor S.E.P.P. activo en puerto ${PORT}`);
 });
