@@ -1,7 +1,7 @@
-body-parser@2.2.2
-cors@2.8.6
-express@5.2.1
-firebase-admin@13.10.0
-multer@2.1.1
-pg@8.21.0
+body-parser
+cors
+express
+firebase-admin
+multer
+pg
 
