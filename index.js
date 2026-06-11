@@ -12,7 +12,7 @@ admin.initializeApp({
     credential: admin.credential.cert({
         projectId: process.env.FIREBASE_PROJECT_ID,
         clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') // Esto repara los saltos de línea
+        privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') : undefined // Esto repara los saltos de línea
     })
 });
 
@@ -20,9 +20,9 @@ admin.initializeApp({
 const app = express();
 app.use(bodyParser.json());
 
-// CONFIGURACIÓN DE IP (Cambia esto si tu PC cambia de IP) 192.168.0.100 laptop / 192.168.137.1 pc
-const MY_IP = '192.168.137.1'; 
-const PORT = 3000;
+// La URL base vendrá de las variables de entorno de Render
+const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
+const PORT = process.env.PORT || 3000;
 
 // Configuración de Multer (Almacenamiento de fotos de perfil)
 const storage = multer.diskStorage({
@@ -53,7 +53,6 @@ async function dispararAlertaPush(nombreSalon, tipoFalta) {
     };
     try {
         await admin.messaging().send(message);
-        console.log(`[Firebase] Notificación enviada a ${nombreSalon}`);
     } catch (error) {
         console.error('[Firebase] Error:', error);
     }
@@ -77,41 +76,24 @@ app.post('/api/login', async (req, res) => {
 // 2. Obtener Perfil
 app.get('/api/perfil/:id', async (req, res) => {
     try {
-        // CORRECCIÓN: Usamos los nombres de columnas que SÍ existen en tu tabla
         const query = 'SELECT nombre, especialidad, foto_url, telefono FROM docentes WHERE id_docente = $1';
         const result = await pool.query(query, [req.params.id]);
-        
-        if (result.rows.length > 0) {
-            res.json(result.rows[0]);
-        } else {
-            res.status(404).json({ success: false, message: "Docente no encontrado" });
-        }
-    } catch (err) { 
-        console.error("Error en BD:", err);
-        res.status(500).json({ success: false, message: err.message }); 
-    }
+        if (result.rows.length > 0) res.json(result.rows[0]);
+        else res.status(404).json({ success: false });
+    } catch (err) { res.status(500).json({ success: false }); }
 });
 
 // 3. Subir foto de perfil
 app.post('/api/subir-foto/:id', upload.single('foto'), async (req, res) => {
     try {
-        // 1. Obtener el nombre de la foto vieja
         const resOld = await pool.query('SELECT foto_url FROM docentes WHERE id_docente = $1', [req.params.id]);
         const fotoVieja = resOld.rows[0]?.foto_url;
-
-        // 2. Si existe una foto vieja, borrarla del disco
         if (fotoVieja && fs.existsSync('./imagenes/perfiles/' + fotoVieja)) {
             fs.unlinkSync('./imagenes/perfiles/' + fotoVieja);
         }
-
-        // 3. Guardar la nueva en BD
-        const nombreArchivo = req.file.filename;
-        await pool.query('UPDATE docentes SET foto_url = $1 WHERE id_docente = $2', [nombreArchivo, req.params.id]);
-        
-        res.json({ success: true, message: "Foto actualizada" });
-    } catch (err) {
-        res.status(500).json({ success: false, message: "Error" });
-    }
+        await pool.query('UPDATE docentes SET foto_url = $1 WHERE id_docente = $2', [req.file.filename, req.params.id]);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ success: false }); }
 });
 // Servir imágenes
 app.use('/imagenes', express.static(path.join(__dirname, 'public/imagenes')));
@@ -120,12 +102,10 @@ app.use('/imagenes', express.static(path.join(__dirname, 'public/imagenes')));
 app.get('/api/alertas-historial', async (req, res) => {
     try {
         const query = `
-            SELECT a.id_alerta, a.tipo_falta, a.fecha_hora, a.severidad, a.codigo_camara,
-                   COALESCE(s.nombre_salon, 'Área General') as nombre_salon,
+            SELECT a.*, COALESCE(s.nombre_salon, 'Área General') as nombre_salon,
             CASE 
-                WHEN a.evidencia_url IS NULL OR a.evidencia_url = '' THEN ''
                 WHEN a.evidencia_url LIKE 'http%' THEN a.evidencia_url
-                ELSE 'http://${MY_IP}:${PORT}/imagenes/' || a.evidencia_url 
+                ELSE '${BASE_URL}/imagenes/' || a.evidencia_url 
             END as evidencia_url
             FROM alertas a
             LEFT JOIN camaras c ON a.codigo_camara = c.codigo_camara
@@ -133,12 +113,8 @@ app.get('/api/alertas-historial', async (req, res) => {
             ORDER BY a.fecha_hora DESC;
         `;
         const result = await pool.query(query);
-        // Enviamos el historial completo
         res.json({ success: true, data: result.rows });
-    } catch (err) { 
-        console.error("Error en historial:", err);
-        res.status(500).json({ success: false, message: err.message });
-    }
+    } catch (err) { res.status(500).json({ success: false }); }
 });
 
 // 5. Alerta Actual (CORREGIDO)
@@ -150,7 +126,7 @@ app.get('/api/alerta-actual/:id_docente', async (req, res) => {
             CASE 
                 WHEN a.evidencia_url IS NULL OR a.evidencia_url = '' THEN ''
                 WHEN a.evidencia_url LIKE 'http%' THEN a.evidencia_url
-                ELSE 'http://${MY_IP}:${PORT}/imagenes/' || a.evidencia_url 
+                ELSE '${BASE_URL}/imagenes/' || a.evidencia_url 
             END as evidencia_url
             FROM alertas a
             JOIN camaras c ON a.codigo_camara = c.codigo_camara
@@ -161,7 +137,10 @@ app.get('/api/alerta-actual/:id_docente', async (req, res) => {
         `;
         const result = await pool.query(query, [idDocente]);
         res.json({ success: true, data: result.rows[0] || {} });
-    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+    } catch (err) { 
+        console.error("Error en alerta-actual:", err);
+        res.status(500).json({ success: false, message: err.message }); 
+    }
 });
 
 // 6. Obtener Alertas de un salón
@@ -185,17 +164,16 @@ app.get('/api/alertas/:id_salon', async (req, res) => {
     }
 });
 
-
-
-// 7. Historial filtrado por docente (Corregida con DISTINCT)
+// 7. Historial filtrado por docente (Corregida para la nube)
 app.get('/api/alertas-historial/:id_docente', async (req, res) => {
     const { id_docente } = req.params;
     try {
         const query = `
             SELECT DISTINCT ON (a.id_alerta) a.*, s.nombre_salon,
             CASE 
+                WHEN a.evidencia_url IS NULL OR a.evidencia_url = '' THEN ''
                 WHEN a.evidencia_url LIKE 'http%' THEN a.evidencia_url
-                ELSE 'http://${MY_IP}:${PORT}/imagenes/' || a.evidencia_url 
+                ELSE '${BASE_URL}/imagenes/' || a.evidencia_url 
             END as evidencia_url
             FROM alertas a
             JOIN camaras c ON a.codigo_camara = c.codigo_camara
@@ -207,30 +185,23 @@ app.get('/api/alertas-historial/:id_docente', async (req, res) => {
         const result = await pool.query(query, [id_docente]);
         res.json({ success: true, data: result.rows });
     } catch (err) { 
+        console.error("Error en historial filtrado:", err);
         res.status(500).json({ success: false, message: err.message });
     }
 });
-
-
 
 // 8. Notificación IA (Flask)
 app.post('/api/notificacion-flask', async (req, res) => {
     const { codigo_camara, tipo_falta, evidencia_url, severidad } = req.body;
     try {
-        await pool.query(
-            'INSERT INTO alertas (codigo_camara, tipo_falta, evidencia_url, severidad, fecha_hora) VALUES ($1, $2, $3, $4, NOW())', 
-            [codigo_camara, tipo_falta, evidencia_url, severidad]
-        );
-        const salonResult = await pool.query('SELECT nombre_salon FROM salones s JOIN camaras c ON s.id_salon = c.id_salon WHERE c.codigo_camara = $1', [codigo_camara]);
-        const nombreSalon = salonResult.rows[0]?.nombre_salon || "Área Protegida";
-        await dispararAlertaPush(nombreSalon, tipo_falta);
-        res.json({ success: true, message: "Alerta procesada" });
-    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+        await pool.query('INSERT INTO alertas (codigo_camara, tipo_falta, evidencia_url, severidad, fecha_hora) VALUES ($1, $2, $3, $4, NOW())', [codigo_camara, tipo_falta, evidencia_url, severidad]);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ success: false }); }
 });
 
 
 
 // ESCUCHA
-app.listen(3000, '0.0.0.0', () => {
-    console.log('Servidor S.E.P.P. activo en http://0.0.0.0:3000');
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Servidor S.E.P.P. activo en puerto ${PORT}`);
 });
