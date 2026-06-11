@@ -1,8 +1,0 @@
-node_modules/
-.gradle/
-.idea/
-build/
-*.apk
-serviceAccountKey.json
-.env
-.DS_Store
